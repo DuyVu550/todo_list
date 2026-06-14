@@ -1,0 +1,18 @@
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty("android")) {
+            if (project.android.namespace == null) {
+                def namespaceStr = project.group
+                if (namespaceStr == null || namespaceStr.toString().isEmpty() || namespaceStr == "null") {
+                    namespaceStr = "com.example." + project.name.replaceAll("-", "_")
+                }
+                project.android.namespace = namespaceStr
+            }
+            
+            // Bắt buộc nâng compileSdk của các package cũ lên 34 để tránh lỗi tương thích
+            if (project.android.hasProperty("compileSdkVersion")) {
+                project.android.compileSdkVersion 35
+            }
+        }
+    }
+}
