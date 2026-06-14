@@ -57,8 +57,6 @@ Một ứng dụng Quản lý công việc (Todo List) hiện đại, nhanh chó
     *   `data/`: Các model Isar và logic lưu trữ.
     *   `presentation/`: UI (Screens), Widgets, và Notifiers/Providers.
 
-## 🤝 Đóng góp (Contributing)
-Mọi đóng góp, báo lỗi (issues) hay yêu cầu tính năng (feature requests) đều được hoan nghênh! Vui lòng tạo Pull Request hoặc Issue trên repository này.
-
 ---
 *Phát triển bởi [Tên của bạn/Đội ngũ của bạn].*
+
