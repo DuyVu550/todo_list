@@ -156,10 +156,12 @@ class CategoryListScreen extends ConsumerWidget {
                     children: [
                       IconButton(
                         icon: const Icon(Icons.edit_rounded, color: Colors.blue),
+                        tooltip: 'Sửa danh mục',
                         onPressed: () => _showCategoryDialog(context, ref, category: category),
                       ),
                       IconButton(
                         icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                        tooltip: 'Xóa danh mục',
                         onPressed: () {
                           ref.read(categoryListProvider.notifier).deleteCategory(category.id);
                         },

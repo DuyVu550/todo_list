@@ -23,7 +23,8 @@ class MockTaskListNotifier extends StreamNotifier<List<TaskModel>> implements Ta
       ..title = title
       ..description = description
       ..createdAt = DateTime.now()
-      ..isCompleted = false;
+      ..isCompleted = false
+      ..orderIndex = _tasks.length;
     if (category != null) {
       task.category.value = category;
     }
@@ -59,6 +60,22 @@ class MockTaskListNotifier extends StreamNotifier<List<TaskModel>> implements Ta
   @override
   Future<void> deleteTask(int taskId) async {
     _tasks = _tasks.where((t) => t.id != taskId).toList();
+    state = AsyncData(_tasks);
+  }
+
+  @override
+  Future<void> reorderTasks(int oldIndex, int newIndex) async {
+    final tasks = List<TaskModel>.from(_tasks)
+      ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
+    final item = tasks.removeAt(oldIndex);
+    tasks.insert(newIndex, item);
+    for (int i = 0; i < tasks.length; i++) {
+      tasks[i].orderIndex = i;
+    }
+    _tasks = tasks;
     state = AsyncData(_tasks);
   }
 }
@@ -156,7 +173,7 @@ void main() {
           overrides: [
             filteredTaskListProvider.overrideWithValue(
               AsyncValue.data([
-                TaskModel()..id = 1..title = 'Cũ'..isCompleted = false
+                TaskModel()..id = 1..title = 'Cũ'..isCompleted = false..orderIndex = 0
               ])
             )
           ],
@@ -281,5 +298,76 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Hạn chót').last);
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('Should support drag-and-drop to reorder tasks in custom sort mode', (WidgetTester tester) async {
+    await tester.pumpWidget(createWidgetUnderTest());
+    await tester.pumpAndSettle();
+
+    // Thêm Task 1
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(0), 'Task 1');
+    await tester.tap(find.text('Lưu'));
+    await tester.pumpAndSettle();
+
+    // Thêm Task 2
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(0), 'Task 2');
+    await tester.tap(find.text('Lưu'));
+    await tester.pumpAndSettle();
+
+    // Check ban đầu: Task 1 ở trên, Task 2 ở dưới
+    expect(find.byType(ReorderableListView), findsOneWidget);
+    
+    // Tìm Widget ListTile của các Task
+    final task1Finder = find.widgetWithText(ListTile, 'Task 1');
+    final task2Finder = find.widgetWithText(ListTile, 'Task 2');
+
+    expect(task1Finder, findsOneWidget);
+    expect(task2Finder, findsOneWidget);
+
+    // Kéo thả Task 1 xuống dưới vị trí của Task 2
+    // Trong môi trường test mặc định (Android), ReorderableListView sử dụng ReorderableDelayedDragStartListener
+    final dragHandleFinder = find.byType(ReorderableDelayedDragStartListener).first;
+    expect(dragHandleFinder, findsOneWidget);
+
+    // Kéo tay cầm của Task 1 xuống dưới (ví dụ 100 pixel) để vượt qua vị trí của Task 2
+    final firstLocation = tester.getCenter(task1Finder);
+    final TestGesture gesture = await tester.startGesture(firstLocation);
+    await tester.pump(const Duration(seconds: 1)); // Pump thời gian long press để kích hoạt drag
+    await gesture.moveTo(firstLocation + const Offset(0.0, 150.0));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    // Sau khi kéo thả, verify thứ tự mới: Task 2 lên trước, Task 1 ra sau
+    final listTileFinder = find.byType(ListTile);
+    expect(tester.widget<Text>(find.descendant(of: listTileFinder.at(0), matching: find.byType(Text)).first).data, 'Task 2');
+    expect(tester.widget<Text>(find.descendant(of: listTileFinder.at(1), matching: find.byType(Text)).first).data, 'Task 1');
+  });
+
+  testWidgets('Should have tooltips on action buttons', (WidgetTester tester) async {
+    await tester.pumpWidget(createWidgetUnderTest());
+    await tester.pumpAndSettle();
+
+    // Kiểm tra tooltip trên AppBar
+    expect(find.byTooltip('Tìm kiếm'), findsOneWidget);
+    expect(find.byTooltip('Quản lý Danh mục'), findsOneWidget);
+    expect(find.byTooltip('Lọc trạng thái'), findsOneWidget);
+    expect(find.byTooltip('Sắp xếp'), findsOneWidget);
+    
+    // Kiểm tra tooltip trên FloatingActionButton
+    expect(find.byTooltip('Thêm công việc mới'), findsOneWidget);
+
+    // Thêm một task để có nút xóa
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(0), 'Task 1');
+    await tester.tap(find.text('Lưu'));
+    await tester.pumpAndSettle();
+
+    // Kiểm tra tooltip trên nút xóa
+    expect(find.byTooltip('Xóa công việc'), findsOneWidget);
   });
 }

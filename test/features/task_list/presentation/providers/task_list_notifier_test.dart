@@ -173,9 +173,16 @@ void main() {
     await notifier.addTask('Task B', dueDate: pastDate);
     await Future.delayed(const Duration(milliseconds: 100));
 
-    // Mặc định là Mới nhất (Task B tạo sau nên xếp trên Task A)
+    // Mặc định là Tùy chỉnh (Task A tạo trước nên orderIndex nhỏ hơn, xếp trên Task B)
     var filteredTasks = container.read(filteredTaskListProvider).value!;
     expect(filteredTasks.length, 2);
+    expect(filteredTasks[0].title, 'Task A');
+    expect(filteredTasks[1].title, 'Task B');
+
+    // Chuyển sang sắp xếp theo Mới nhất
+    container.read(taskSortProvider.notifier).state = TaskSort.newest;
+    await Future.delayed(const Duration(milliseconds: 100));
+    filteredTasks = container.read(filteredTaskListProvider).value!;
     expect(filteredTasks[0].title, 'Task B');
     expect(filteredTasks[1].title, 'Task A');
 
@@ -188,5 +195,43 @@ void main() {
 
     subList.close();
     subSort.close();
+  });
+
+  test('reorderTasks should rearrange tasks and update orderIndex', () async {
+    final sub = container.listen(taskListProvider, (_, __) {});
+    final notifier = container.read(taskListProvider.notifier);
+
+    await notifier.addTask('Task 1');
+    await Future.delayed(const Duration(milliseconds: 50));
+    await notifier.addTask('Task 2');
+    await Future.delayed(const Duration(milliseconds: 50));
+    await notifier.addTask('Task 3');
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    // Lấy danh sách hiện tại
+    var tasks = container.read(taskListProvider).value!;
+    expect(tasks.length, 3);
+    expect(tasks[0].title, 'Task 1');
+    expect(tasks[1].title, 'Task 2');
+    expect(tasks[2].title, 'Task 3');
+
+    // Di chuyển Task 1 (index 0) ra sau Task 2 (index 1), tức là newIndex = 2
+    // Trong ReorderableListView, nếu kéo xuống dưới, newIndex sẽ lớn hơn cũ
+    await notifier.reorderTasks(0, 2);
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    tasks = container.read(taskListProvider).value!;
+    // Sắp xếp theo orderIndex để kiểm chứng
+    tasks.sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+
+    expect(tasks[0].title, 'Task 2');
+    expect(tasks[1].title, 'Task 1');
+    expect(tasks[2].title, 'Task 3');
+
+    expect(tasks[0].orderIndex, 0);
+    expect(tasks[1].orderIndex, 1);
+    expect(tasks[2].orderIndex, 2);
+
+    sub.close();
   });
 }

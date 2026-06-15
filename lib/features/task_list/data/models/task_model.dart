@@ -19,6 +19,9 @@ class TaskModel {
   /// Trạng thái hoàn thành của công việc. Mặc định khi tạo mới là false (chưa hoàn thành).
   bool isCompleted = false;
 
+  /// Thứ tự của công việc trong danh sách (dùng cho tính năng kéo thả).
+  int orderIndex = 0;
+
   /// Thời gian tạo công việc (bắt buộc).
   late DateTime createdAt;
 

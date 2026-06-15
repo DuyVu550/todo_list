@@ -22,8 +22,13 @@ const CategoryModelSchema = CollectionSchema(
       name: r'colorValue',
       type: IsarType.long,
     ),
-    r'name': PropertySchema(
+    r'hashCode': PropertySchema(
       id: 1,
+      name: r'hashCode',
+      type: IsarType.long,
+    ),
+    r'name': PropertySchema(
+      id: 2,
       name: r'name',
       type: IsarType.string,
     )
@@ -59,7 +64,8 @@ void _categoryModelSerialize(
   Map<Type, List<int>> allOffsets,
 ) {
   writer.writeLong(offsets[0], object.colorValue);
-  writer.writeString(offsets[1], object.name);
+  writer.writeLong(offsets[1], object.hashCode);
+  writer.writeString(offsets[2], object.name);
 }
 
 CategoryModel _categoryModelDeserialize(
@@ -71,7 +77,7 @@ CategoryModel _categoryModelDeserialize(
   final object = CategoryModel();
   object.colorValue = reader.readLong(offsets[0]);
   object.id = id;
-  object.name = reader.readString(offsets[1]);
+  object.name = reader.readString(offsets[2]);
   return object;
 }
 
@@ -85,6 +91,8 @@ P _categoryModelDeserializeProp<P>(
     case 0:
       return (reader.readLong(offset)) as P;
     case 1:
+      return (reader.readLong(offset)) as P;
+    case 2:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -235,6 +243,62 @@ extension CategoryModelQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
         property: r'colorValue',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<CategoryModel, CategoryModel, QAfterFilterCondition>
+      hashCodeEqualTo(int value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'hashCode',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<CategoryModel, CategoryModel, QAfterFilterCondition>
+      hashCodeGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'hashCode',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<CategoryModel, CategoryModel, QAfterFilterCondition>
+      hashCodeLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'hashCode',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<CategoryModel, CategoryModel, QAfterFilterCondition>
+      hashCodeBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'hashCode',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -454,6 +518,19 @@ extension CategoryModelQuerySortBy
     });
   }
 
+  QueryBuilder<CategoryModel, CategoryModel, QAfterSortBy> sortByHashCode() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'hashCode', Sort.asc);
+    });
+  }
+
+  QueryBuilder<CategoryModel, CategoryModel, QAfterSortBy>
+      sortByHashCodeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'hashCode', Sort.desc);
+    });
+  }
+
   QueryBuilder<CategoryModel, CategoryModel, QAfterSortBy> sortByName() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'name', Sort.asc);
@@ -479,6 +556,19 @@ extension CategoryModelQuerySortThenBy
       thenByColorValueDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'colorValue', Sort.desc);
+    });
+  }
+
+  QueryBuilder<CategoryModel, CategoryModel, QAfterSortBy> thenByHashCode() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'hashCode', Sort.asc);
+    });
+  }
+
+  QueryBuilder<CategoryModel, CategoryModel, QAfterSortBy>
+      thenByHashCodeDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'hashCode', Sort.desc);
     });
   }
 
@@ -515,6 +605,12 @@ extension CategoryModelQueryWhereDistinct
     });
   }
 
+  QueryBuilder<CategoryModel, CategoryModel, QDistinct> distinctByHashCode() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'hashCode');
+    });
+  }
+
   QueryBuilder<CategoryModel, CategoryModel, QDistinct> distinctByName(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -534,6 +630,12 @@ extension CategoryModelQueryProperty
   QueryBuilder<CategoryModel, int, QQueryOperations> colorValueProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'colorValue');
+    });
+  }
+
+  QueryBuilder<CategoryModel, int, QQueryOperations> hashCodeProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'hashCode');
     });
   }
 

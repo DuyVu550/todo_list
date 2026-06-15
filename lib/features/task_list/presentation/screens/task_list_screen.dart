@@ -201,6 +201,7 @@ class TaskListScreen extends ConsumerWidget {
           if (isSearching)
             IconButton(
               icon: const Icon(Icons.close),
+              tooltip: 'Đóng tìm kiếm',
               onPressed: () {
                 ref.read(isSearchingProvider.notifier).state = false;
                 ref.read(taskSearchQueryProvider.notifier).state = '';
@@ -209,6 +210,7 @@ class TaskListScreen extends ConsumerWidget {
           else
             IconButton(
               icon: const Icon(Icons.search),
+              tooltip: 'Tìm kiếm',
               onPressed: () {
                 ref.read(isSearchingProvider.notifier).state = true;
               },
@@ -241,6 +243,7 @@ class TaskListScreen extends ConsumerWidget {
           ),
           PopupMenuButton<TaskFilter>(
             icon: const Icon(Icons.filter_list),
+            tooltip: 'Lọc trạng thái',
             onSelected: (filter) =>
                 ref.read(taskFilterProvider.notifier).state = filter,
             itemBuilder: (context) => [
@@ -257,9 +260,14 @@ class TaskListScreen extends ConsumerWidget {
           ),
           PopupMenuButton<TaskSort>(
             icon: const Icon(Icons.sort),
+            tooltip: 'Sắp xếp',
             onSelected: (sort) =>
                 ref.read(taskSortProvider.notifier).state = sort,
             itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: TaskSort.custom,
+                child: Text('Tùy chỉnh'),
+              ),
               const PopupMenuItem(
                 value: TaskSort.newest,
                 child: Text('Mới nhất'),
@@ -337,79 +345,103 @@ class TaskListScreen extends ConsumerWidget {
           if (tasks.isEmpty) {
             return const Center(child: Text('Chưa có công việc nào.'));
           }
-          return ListView.builder(
-            itemCount: tasks.length,
-            itemBuilder: (context, index) {
-              final task = tasks[index];
-              final category = task.category.value;
-              return ListTile(
-                onTap: () => _showTaskDialog(context, ref, task: task),
-                title: Text(
-                  task.title,
-                  style: TextStyle(
-                    decoration: task.isCompleted
-                        ? TextDecoration.lineThrough
-                        : null,
-                  ),
+          final filter = ref.watch(taskFilterProvider);
+          final sort = ref.watch(taskSortProvider);
+          final searchQuery = ref.watch(taskSearchQueryProvider);
+          final categoryFilter = ref.watch(taskCategoryFilterProvider);
+
+          final canReorder = filter == TaskFilter.all &&
+                             sort == TaskSort.custom &&
+                             searchQuery.isEmpty &&
+                             categoryFilter == null;
+
+          Widget buildTile(TaskModel task) {
+            final category = task.category.value;
+            return ListTile(
+              key: ValueKey(task.id),
+              onTap: () => _showTaskDialog(context, ref, task: task),
+              title: Text(
+                task.title,
+                style: TextStyle(
+                  decoration: task.isCompleted
+                      ? TextDecoration.lineThrough
+                      : null,
                 ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (task.description != null &&
-                        task.description!.isNotEmpty)
-                      Text(task.description!),
-                    if (task.dueDate != null)
-                      Text(
-                        'Hạn: ${DateFormat('dd/MM/yyyy').format(task.dueDate!)}',
-                        style: const TextStyle(color: Colors.red, fontSize: 12),
+              ),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (task.description != null &&
+                      task.description!.isNotEmpty)
+                    Text(task.description!),
+                  if (task.dueDate != null)
+                    Text(
+                      'Hạn: ${DateFormat('dd/MM/yyyy').format(task.dueDate!)}',
+                      style: const TextStyle(color: Colors.red, fontSize: 12),
+                    ),
+                  if (category != null)
+                    Container(
+                      margin: const EdgeInsets.only(top: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
                       ),
-                    if (category != null)
-                      Container(
-                        margin: const EdgeInsets.only(top: 4),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Color(category.colorValue).withAlpha(51),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Color(category.colorValue)),
-                        ),
-                        child: Text(
-                          category.name,
-                          style: TextStyle(
-                            color: Color(category.colorValue),
-                            fontSize: 10,
-                          ),
+                      decoration: BoxDecoration(
+                        color: Color(category.colorValue).withAlpha(51),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Color(category.colorValue)),
+                      ),
+                      child: Text(
+                        category.name,
+                        style: TextStyle(
+                          color: Color(category.colorValue),
+                          fontSize: 10,
                         ),
                       ),
-                  ],
-                ),
-                leading: Checkbox(
-                  value: task.isCompleted,
-                  onChanged: (value) {
-                    if (value != null) {
-                      ref
-                          .read(taskListProvider.notifier)
-                          .toggleTaskCompletion(task.id);
-                    }
-                  },
-                ),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red),
-                  onPressed: () {
-                    ref.read(taskListProvider.notifier).deleteTask(task.id);
-                  },
-                ),
-              );
-            },
-          );
+                    ),
+                ],
+              ),
+              leading: Checkbox(
+                value: task.isCompleted,
+                onChanged: (value) {
+                  if (value != null) {
+                    ref
+                        .read(taskListProvider.notifier)
+                        .toggleTaskCompletion(task.id);
+                  }
+                },
+              ),
+              trailing: IconButton(
+                icon: const Icon(Icons.delete, color: Colors.red),
+                tooltip: 'Xóa công việc',
+                onPressed: () {
+                  ref.read(taskListProvider.notifier).deleteTask(task.id);
+                },
+              ),
+            );
+          }
+
+          if (canReorder) {
+            return ReorderableListView.builder(
+              itemCount: tasks.length,
+              onReorder: (oldIndex, newIndex) {
+                ref.read(taskListProvider.notifier).reorderTasks(oldIndex, newIndex);
+              },
+              itemBuilder: (context, index) => buildTile(tasks[index]),
+            );
+          } else {
+            return ListView.builder(
+              itemCount: tasks.length,
+              itemBuilder: (context, index) => buildTile(tasks[index]),
+            );
+          }
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, stack) => Center(child: Text('Lỗi: $err')),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showTaskDialog(context, ref),
+        tooltip: 'Thêm công việc mới',
         child: const Icon(Icons.add),
       ),
     );

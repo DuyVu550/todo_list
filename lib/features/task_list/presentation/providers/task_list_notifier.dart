@@ -7,7 +7,7 @@ import '../../../../core/database/isar_provider.dart';
 import '../../../../core/services/notification_service.dart';
 
 enum TaskFilter { all, completed, incomplete }
-enum TaskSort { newest, dueDate }
+enum TaskSort { custom, newest, dueDate }
 
 
 class TaskListNotifier extends StreamNotifier<List<TaskModel>> {
@@ -25,12 +25,20 @@ class TaskListNotifier extends StreamNotifier<List<TaskModel>> {
 
   Future<void> addTask(String title, {String? description, DateTime? dueDate, CategoryModel? category}) async {
     final isar = ref.read(isarProvider);
+    
+    final currentState = state.value ?? [];
+    int maxOrderIndex = 0;
+    if (currentState.isNotEmpty) {
+      maxOrderIndex = currentState.map((t) => t.orderIndex).reduce((a, b) => a > b ? a : b);
+    }
+
     final task = TaskModel()
       ..title = title
       ..description = description
       ..dueDate = dueDate
       ..createdAt = DateTime.now()
-      ..isCompleted = false;
+      ..isCompleted = false
+      ..orderIndex = maxOrderIndex + 1;
 
     if (category != null) {
       task.category.value = category;
@@ -115,6 +123,30 @@ class TaskListNotifier extends StreamNotifier<List<TaskModel>> {
     });
     await NotificationService().cancelNotification(taskId);
   }
+
+  Future<void> reorderTasks(int oldIndex, int newIndex) async {
+    final currentState = state.value;
+    if (currentState == null || currentState.isEmpty) return;
+
+    final tasks = List<TaskModel>.from(currentState)
+      ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
+
+    final item = tasks.removeAt(oldIndex);
+    tasks.insert(newIndex, item);
+
+    for (int i = 0; i < tasks.length; i++) {
+      tasks[i].orderIndex = i;
+    }
+
+    final isar = ref.read(isarProvider);
+    await isar.writeTxn(() async {
+      await isar.taskModels.putAll(tasks);
+    });
+  }
 }
 
 final taskListProvider = StreamNotifierProvider<TaskListNotifier, List<TaskModel>>(
@@ -122,7 +154,7 @@ final taskListProvider = StreamNotifierProvider<TaskListNotifier, List<TaskModel
 );
 
 final taskFilterProvider = StateProvider<TaskFilter>((ref) => TaskFilter.all);
-final taskSortProvider = StateProvider<TaskSort>((ref) => TaskSort.newest);
+final taskSortProvider = StateProvider<TaskSort>((ref) => TaskSort.custom);
 final taskCategoryFilterProvider = StateProvider<CategoryModel?>((ref) => null);
 
 // Thêm provider cho tính năng tìm kiếm
@@ -163,6 +195,8 @@ final filteredTaskListProvider = Provider<AsyncValue<List<TaskModel>>>((ref) {
         if (b.dueDate == null) return -1;
         return a.dueDate!.compareTo(b.dueDate!);
       });
+    } else if (sort == TaskSort.custom) {
+      filtered.sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
     }
 
     return filtered;
