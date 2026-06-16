@@ -133,7 +133,7 @@ class CategoryListScreen extends ConsumerWidget {
                 elevation: 0,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.1)),
+                  side: BorderSide(color: Theme.of(context).dividerColor.withValues(alpha: 0.1)),
                 ),
                 margin: const EdgeInsets.only(bottom: 8),
                 child: ListTile(

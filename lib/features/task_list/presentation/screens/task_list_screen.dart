@@ -9,6 +9,8 @@ import 'category_list_screen.dart';
 import 'dashboard_screen.dart';
 
 import '../../../../core/theme/theme_provider.dart';
+import '../../../../core/services/backup_provider.dart';
+import '../../data/models/sub_task_model.dart';
 
 // Provider cục bộ để quản lý trạng thái mở/đóng thanh tìm kiếm
 final isSearchingProvider = StateProvider.autoDispose<bool>((ref) => false);
@@ -19,8 +21,11 @@ class TaskListScreen extends ConsumerWidget {
   void _showTaskDialog(BuildContext context, WidgetRef ref, {TaskModel? task}) {
     final titleController = TextEditingController(text: task?.title ?? '');
     final descController = TextEditingController(text: task?.description ?? '');
+    final subTaskController = TextEditingController();
     DateTime? selectedDate = task?.dueDate;
     CategoryModel? selectedCategory = task?.category.value;
+    TaskPriority selectedPriority = task?.priority ?? TaskPriority.medium;
+    List<SubTaskModel> currentSubTasks = task?.subTasks.map((e) => SubTaskModel()..title = e.title..isCompleted = e.isCompleted).toList() ?? [];
 
     showDialog(
       context: context,
@@ -54,7 +59,7 @@ class TaskListScreen extends ConsumerWidget {
                           child: Text(
                             selectedDate == null
                                 ? 'Chưa chọn hạn chót'
-                                : 'Hạn: ${DateFormat('dd/MM/yyyy').format(selectedDate!)}',
+                                : 'Hạn: ${DateFormat('dd/MM/yyyy HH:mm').format(selectedDate!)}',
                           ),
                         ),
                         TextButton(
@@ -66,10 +71,26 @@ class TaskListScreen extends ConsumerWidget {
                               lastDate: DateTime(2100),
                             );
                             if (date != null) {
-                              setState(() => selectedDate = date);
+                              if (context.mounted) {
+                                final time = await showTimePicker(
+                                  context: context,
+                                  initialTime: TimeOfDay.fromDateTime(selectedDate ?? DateTime.now()),
+                                );
+                                if (time != null) {
+                                  setState(() {
+                                    selectedDate = DateTime(
+                                      date.year,
+                                      date.month,
+                                      date.day,
+                                      time.hour,
+                                      time.minute,
+                                    );
+                                  });
+                                }
+                              }
                             }
                           },
-                          child: const Text('Chọn ngày'),
+                          child: const Text('Chọn ngày giờ'),
                         ),
                       ],
                     ),
@@ -85,7 +106,7 @@ class TaskListScreen extends ConsumerWidget {
                               decoration: const InputDecoration(
                                 labelText: 'Danh mục',
                               ),
-                              value: selectedCategory,
+                              initialValue: selectedCategory,
                               items: [
                                 const DropdownMenuItem<CategoryModel>(
                                   value: null,
@@ -123,6 +144,78 @@ class TaskListScreen extends ConsumerWidget {
                         );
                       },
                     ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<TaskPriority>(
+                      decoration: const InputDecoration(labelText: 'Mức độ ưu tiên'),
+                      initialValue: selectedPriority,
+                      items: const [
+                        DropdownMenuItem(value: TaskPriority.low, child: Text('Thấp')),
+                        DropdownMenuItem(value: TaskPriority.medium, child: Text('Trung bình')),
+                        DropdownMenuItem(value: TaskPriority.high, child: Text('Cao')),
+                        DropdownMenuItem(value: TaskPriority.urgent, child: Text('Khẩn cấp')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setState(() => selectedPriority = val);
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    const Align(alignment: Alignment.centerLeft, child: Text('Việc con (Sub-tasks):', style: TextStyle(fontWeight: FontWeight.bold))),
+                    ...currentSubTasks.asMap().entries.map((entry) {
+                      final idx = entry.key;
+                      final st = entry.value;
+                      return Row(
+                        children: [
+                          Checkbox(
+                            value: st.isCompleted,
+                            onChanged: (val) {
+                              setState(() => st.isCompleted = val ?? false);
+                            },
+                          ),
+                          Expanded(
+                            child: TextField(
+                              controller: TextEditingController(text: st.title),
+                              onChanged: (val) => st.title = val,
+                              decoration: const InputDecoration(isDense: true, border: InputBorder.none),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close, size: 16),
+                            onPressed: () {
+                              setState(() => currentSubTasks.removeAt(idx));
+                            },
+                          ),
+                        ],
+                      );
+                    }),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: subTaskController,
+                            decoration: const InputDecoration(hintText: 'Thêm việc con...'),
+                            onSubmitted: (val) {
+                              if (val.trim().isNotEmpty) {
+                                setState(() {
+                                  currentSubTasks.add(SubTaskModel()..title = val.trim());
+                                  subTaskController.clear();
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.add),
+                          onPressed: () {
+                            if (subTaskController.text.trim().isNotEmpty) {
+                              setState(() {
+                                currentSubTasks.add(SubTaskModel()..title = subTaskController.text.trim());
+                                subTaskController.clear();
+                              });
+                            }
+                          },
+                        )
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -144,6 +237,8 @@ class TaskListScreen extends ConsumerWidget {
                             description: descController.text.trim(),
                             dueDate: selectedDate,
                             category: selectedCategory,
+                            priority: selectedPriority,
+                            subTasks: currentSubTasks,
                           );
                     } else {
                       ref
@@ -154,6 +249,8 @@ class TaskListScreen extends ConsumerWidget {
                             description: descController.text.trim(),
                             dueDate: selectedDate,
                             category: selectedCategory,
+                            priority: selectedPriority,
+                            subTasks: currentSubTasks,
                           );
                     }
                     Navigator.of(context).pop();
@@ -278,6 +375,40 @@ class TaskListScreen extends ConsumerWidget {
               ),
             ],
           ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            tooltip: 'Hành động khác',
+            onSelected: (value) {
+              if (value == 'clear_completed') {
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Xóa việc đã xong'),
+                    content: const Text('Bạn có chắc chắn muốn xóa tất cả công việc đã hoàn thành?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Hủy'),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          ref.read(taskListProvider.notifier).clearCompletedTasks();
+                          Navigator.pop(ctx);
+                        },
+                        child: const Text('Xóa tất cả', style: TextStyle(color: Colors.red)),
+                      ),
+                    ],
+                  ),
+                );
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'clear_completed',
+                child: Text('Xóa tất cả việc đã xong'),
+              ),
+            ],
+          ),
         ],
       ),
       drawer: Drawer(
@@ -322,6 +453,29 @@ class TaskListScreen extends ConsumerWidget {
               },
             ),
             const Divider(),
+            ListTile(
+              leading: const Icon(Icons.download),
+              title: const Text('Sao lưu (Export JSON)'),
+              onTap: () async {
+                Navigator.pop(context);
+                final path = await ref.read(backupServiceProvider).exportData();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Đã lưu tại: $path')));
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.upload),
+              title: const Text('Khôi phục (Import JSON)'),
+              onTap: () async {
+                Navigator.pop(context);
+                final success = await ref.read(backupServiceProvider).importData();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(success ? 'Khôi phục thành công' : 'Lỗi/Không tìm thấy file')));
+                }
+              },
+            ),
+            const Divider(),
             Consumer(
               builder: (context, ref, child) {
                 final themeMode = ref.watch(themeProvider);
@@ -343,7 +497,18 @@ class TaskListScreen extends ConsumerWidget {
       body: taskListAsync.when(
         data: (tasks) {
           if (tasks.isEmpty) {
-            return const Center(child: Text('Chưa có công việc nào.'));
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.inbox_outlined, size: 80, color: Colors.grey.withAlpha(128)),
+                  const SizedBox(height: 16),
+                  const Text('Chưa có công việc nào.', style: TextStyle(fontSize: 18, color: Colors.grey)),
+                  const SizedBox(height: 8),
+                  const Text('Hãy nhấn nút + để thêm mới.', style: TextStyle(color: Colors.grey)),
+                ],
+              ),
+            );
           }
           final filter = ref.watch(taskFilterProvider);
           final sort = ref.watch(taskSortProvider);
@@ -357,7 +522,44 @@ class TaskListScreen extends ConsumerWidget {
 
           Widget buildTile(TaskModel task) {
             final category = task.category.value;
-            return ListTile(
+            return Dismissible(
+              key: ValueKey('dismiss_${task.id}'),
+              background: Container(
+                color: Colors.green,
+                alignment: Alignment.centerLeft,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: const Icon(Icons.check, color: Colors.white),
+              ),
+              secondaryBackground: Container(
+                color: Colors.red,
+                alignment: Alignment.centerRight,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: const Icon(Icons.delete, color: Colors.white),
+              ),
+              confirmDismiss: (direction) async {
+                if (direction == DismissDirection.endToStart) {
+                  return await showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Xác nhận xóa'),
+                      content: const Text('Bạn có chắc chắn muốn xóa công việc này?'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Hủy')),
+                        TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Xóa', style: TextStyle(color: Colors.red))),
+                      ],
+                    ),
+                  );
+                } else {
+                  ref.read(taskListProvider.notifier).toggleTaskCompletion(task.id);
+                  return false;
+                }
+              },
+              onDismissed: (direction) {
+                if (direction == DismissDirection.endToStart) {
+                  ref.read(taskListProvider.notifier).deleteTask(task.id);
+                }
+              },
+              child: ListTile(
               key: ValueKey(task.id),
               onTap: () => _showTaskDialog(context, ref, task: task),
               title: Text(
@@ -375,9 +577,18 @@ class TaskListScreen extends ConsumerWidget {
                       task.description!.isNotEmpty)
                     Text(task.description!),
                   if (task.dueDate != null)
-                    Text(
-                      'Hạn: ${DateFormat('dd/MM/yyyy').format(task.dueDate!)}',
-                      style: const TextStyle(color: Colors.red, fontSize: 12),
+                    Builder(
+                      builder: (context) {
+                        final now = DateTime.now();
+                        final dueDate = task.dueDate!;
+                        final isOverdue = dueDate.isBefore(now) && !task.isCompleted;
+                        final isToday = dueDate.year == now.year && dueDate.month == now.month && dueDate.day == now.day;
+                        final color = isOverdue ? Colors.red : (isToday ? Colors.orange : Colors.grey);
+                        return Text(
+                          'Hạn: ${DateFormat('dd/MM/yyyy HH:mm').format(dueDate)}',
+                          style: TextStyle(color: color, fontSize: 12),
+                        );
+                      }
                     ),
                   if (category != null)
                     Container(
@@ -399,6 +610,37 @@ class TaskListScreen extends ConsumerWidget {
                         ),
                       ),
                     ),
+                  if (task.priority != TaskPriority.medium)
+                    Container(
+                      margin: const EdgeInsets.only(top: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: task.priority == TaskPriority.urgent ? Colors.red.withAlpha(51) : 
+                               (task.priority == TaskPriority.high ? Colors.orange.withAlpha(51) : Colors.green.withAlpha(51)),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: task.priority == TaskPriority.urgent ? Colors.red : 
+                                 (task.priority == TaskPriority.high ? Colors.orange : Colors.green),
+                        ),
+                      ),
+                      child: Text(
+                        task.priority == TaskPriority.urgent ? 'Khẩn cấp' : 
+                        (task.priority == TaskPriority.high ? 'Cao' : 'Thấp'),
+                        style: TextStyle(
+                          color: task.priority == TaskPriority.urgent ? Colors.red : 
+                                 (task.priority == TaskPriority.high ? Colors.orange : Colors.green),
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                  if (task.subTasks.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        'Việc con: ${task.subTasks.where((e) => e.isCompleted).length}/${task.subTasks.length}',
+                        style: const TextStyle(fontSize: 12, color: Colors.blueGrey),
+                      ),
+                    ),
                 ],
               ),
               leading: Checkbox(
@@ -415,13 +657,33 @@ class TaskListScreen extends ConsumerWidget {
                 icon: const Icon(Icons.delete, color: Colors.red),
                 tooltip: 'Xóa công việc',
                 onPressed: () {
-                  ref.read(taskListProvider.notifier).deleteTask(task.id);
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Xác nhận xóa'),
+                      content: const Text('Bạn có chắc chắn muốn xóa công việc này?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('Hủy'),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            ref.read(taskListProvider.notifier).deleteTask(task.id);
+                            Navigator.pop(ctx);
+                          },
+                          child: const Text('Xóa', style: TextStyle(color: Colors.red)),
+                        ),
+                      ],
+                    ),
+                  );
                 },
               ),
-            );
-          }
+            ),
+          );
+        }
 
-          if (canReorder) {
+        if (canReorder) {
             return ReorderableListView.builder(
               itemCount: tasks.length,
               onReorder: (oldIndex, newIndex) {

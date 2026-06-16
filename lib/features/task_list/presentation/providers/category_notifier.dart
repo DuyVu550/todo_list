@@ -4,7 +4,7 @@ import 'package:isar/isar.dart';
 import '../../data/models/category_model.dart';
 import '../../../../core/database/isar_provider.dart';
 
-class CategoryNotifier extends AutoDisposeStreamNotifier<List<CategoryModel>> {
+class CategoryNotifier extends StreamNotifier<List<CategoryModel>> {
   @override
   Stream<List<CategoryModel>> build() {
     final isar = ref.watch(isarProvider);
@@ -42,6 +42,6 @@ class CategoryNotifier extends AutoDisposeStreamNotifier<List<CategoryModel>> {
   }
 }
 
-final categoryListProvider = AutoDisposeStreamNotifierProvider<CategoryNotifier, List<CategoryModel>>(
+final categoryListProvider = StreamNotifierProvider<CategoryNotifier, List<CategoryModel>>(
   () => CategoryNotifier(),
 );

@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:isar/isar.dart';
 import '../../data/models/task_model.dart';
 import '../../data/models/category_model.dart';
+import '../../data/models/sub_task_model.dart';
 import '../../../../core/database/isar_provider.dart';
-import '../../../../core/services/notification_service.dart';
+import '../../../../core/services/notification_provider.dart';
+import 'package:intl/intl.dart';
 
 enum TaskFilter { all, completed, incomplete }
 enum TaskSort { custom, newest, dueDate }
@@ -23,8 +25,9 @@ class TaskListNotifier extends StreamNotifier<List<TaskModel>> {
     });
   }
 
-  Future<void> addTask(String title, {String? description, DateTime? dueDate, CategoryModel? category}) async {
+  Future<void> addTask(String title, {String? description, DateTime? dueDate, CategoryModel? category, TaskPriority priority = TaskPriority.medium, List<SubTaskModel> subTasks = const []}) async {
     final isar = ref.read(isarProvider);
+    final notificationService = ref.read(notificationServiceProvider);
     
     final currentState = state.value ?? [];
     int maxOrderIndex = 0;
@@ -36,6 +39,8 @@ class TaskListNotifier extends StreamNotifier<List<TaskModel>> {
       ..title = title
       ..description = description
       ..dueDate = dueDate
+      ..priority = priority
+      ..subTasks = subTasks
       ..createdAt = DateTime.now()
       ..isCompleted = false
       ..orderIndex = maxOrderIndex + 1;
@@ -51,29 +56,28 @@ class TaskListNotifier extends StreamNotifier<List<TaskModel>> {
       }
     });
 
-    // Cài đặt nhắc nhở nếu có Due Date
     if (dueDate != null) {
-      // Đặt lịch trước 1 tiếng, hoặc dùng luôn giờ do user chọn
-      final scheduleTime = dueDate.subtract(const Duration(hours: 1));
-      if (scheduleTime.isAfter(DateTime.now())) {
-        await NotificationService().scheduleNotification(
-          id: task.id,
-          title: 'Nhắc nhở: ${task.title}',
-          body: 'Công việc sắp đến hạn vào ${task.dueDate}',
-          scheduledDate: scheduleTime,
-        );
-      }
+      final formattedTime = DateFormat('HH:mm dd/MM/yyyy').format(dueDate);
+      notificationService.scheduleNotification(
+        id: task.id,
+        title: title,
+        body: 'Công việc sắp đến hạn lúc $formattedTime',
+        scheduledDate: dueDate.subtract(const Duration(minutes: 10)),
+      );
     }
   }
 
-  Future<void> updateTask(int taskId, String title, {String? description, DateTime? dueDate, CategoryModel? category}) async {
+  Future<void> updateTask(int taskId, String title, {String? description, DateTime? dueDate, CategoryModel? category, TaskPriority priority = TaskPriority.medium, List<SubTaskModel> subTasks = const []}) async {
     final isar = ref.read(isarProvider);
+    final notificationService = ref.read(notificationServiceProvider);
     await isar.writeTxn(() async {
       final task = await isar.taskModels.get(taskId);
       if (task != null) {
         task.title = title;
         task.description = description;
         task.dueDate = dueDate;
+        task.priority = priority;
+        task.subTasks = subTasks;
 
         if (category != null) {
           task.category.value = category;
@@ -84,25 +88,37 @@ class TaskListNotifier extends StreamNotifier<List<TaskModel>> {
         await isar.taskModels.put(task);
         await task.category.save();
 
-        if (dueDate != null && !task.isCompleted) {
-          final scheduleTime = dueDate.subtract(const Duration(hours: 1));
-          if (scheduleTime.isAfter(DateTime.now())) {
-            await NotificationService().scheduleNotification(
-              id: task.id,
-              title: 'Nhắc nhở: ${task.title}',
-              body: 'Công việc sắp đến hạn vào ${task.dueDate}',
-              scheduledDate: scheduleTime,
-            );
-          }
+        if (dueDate != null) {
+          final formattedTime = DateFormat('HH:mm dd/MM/yyyy').format(dueDate);
+          notificationService.scheduleNotification(
+            id: task.id,
+            title: title,
+            body: 'Công việc sắp đến hạn lúc $formattedTime',
+            scheduledDate: dueDate.subtract(const Duration(minutes: 10)),
+          );
         } else {
-          await NotificationService().cancelNotification(taskId);
+          await notificationService.cancelNotification(taskId);
         }
+      }
+    });
+  }
+
+  Future<void> toggleSubTaskCompletion(int taskId, int subTaskIndex) async {
+    final isar = ref.read(isarProvider);
+    await isar.writeTxn(() async {
+      final task = await isar.taskModels.get(taskId);
+      if (task != null && subTaskIndex >= 0 && subTaskIndex < task.subTasks.length) {
+        final subTasks = List<SubTaskModel>.from(task.subTasks);
+        subTasks[subTaskIndex].isCompleted = !subTasks[subTaskIndex].isCompleted;
+        task.subTasks = subTasks;
+        await isar.taskModels.put(task);
       }
     });
   }
 
   Future<void> toggleTaskCompletion(int taskId) async {
     final isar = ref.read(isarProvider);
+    final notificationService = ref.read(notificationServiceProvider);
     await isar.writeTxn(() async {
       final task = await isar.taskModels.get(taskId);
       if (task != null) {
@@ -110,7 +126,7 @@ class TaskListNotifier extends StreamNotifier<List<TaskModel>> {
         await isar.taskModels.put(task);
 
         if (task.isCompleted) {
-          await NotificationService().cancelNotification(taskId);
+          await notificationService.cancelNotification(taskId);
         }
       }
     });
@@ -118,10 +134,27 @@ class TaskListNotifier extends StreamNotifier<List<TaskModel>> {
 
   Future<void> deleteTask(int taskId) async {
     final isar = ref.read(isarProvider);
+    final notificationService = ref.read(notificationServiceProvider);
     await isar.writeTxn(() async {
       await isar.taskModels.delete(taskId);
     });
-    await NotificationService().cancelNotification(taskId);
+    await notificationService.cancelNotification(taskId);
+  }
+
+  Future<void> clearCompletedTasks() async {
+    final isar = ref.read(isarProvider);
+    final notificationService = ref.read(notificationServiceProvider);
+    
+    final completedTasks = await isar.taskModels.filter().isCompletedEqualTo(true).findAll();
+    final completedTaskIds = completedTasks.map((t) => t.id).toList();
+
+    await isar.writeTxn(() async {
+      await isar.taskModels.deleteAll(completedTaskIds);
+    });
+
+    for (var id in completedTaskIds) {
+      await notificationService.cancelNotification(id);
+    }
   }
 
   Future<void> reorderTasks(int oldIndex, int newIndex) async {

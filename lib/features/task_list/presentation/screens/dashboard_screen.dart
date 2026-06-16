@@ -21,8 +21,9 @@ class DashboardScreen extends ConsumerWidget {
 
           final total = tasks.length;
           final completed = tasks.where((t) => t.isCompleted).length;
-          final incomplete = total - completed;
           final progress = total > 0 ? completed / total : 0.0;
+          final now = DateTime.now();
+          final overdue = tasks.where((t) => t.dueDate != null && t.dueDate!.isBefore(now) && !t.isCompleted).length;
 
           // Thống kê theo danh mục
           final categoryStats = <String, int>{};
@@ -72,7 +73,7 @@ class DashboardScreen extends ConsumerWidget {
                         children: [
                           _StatItem(label: 'Tổng số', value: total.toString(), color: Colors.blue),
                           _StatItem(label: 'Hoàn thành', value: completed.toString(), color: Colors.green),
-                          _StatItem(label: 'Chưa xong', value: incomplete.toString(), color: Colors.orange),
+                          _StatItem(label: 'Quá hạn', value: overdue.toString(), color: Colors.red),
                         ],
                       ),
                     ],

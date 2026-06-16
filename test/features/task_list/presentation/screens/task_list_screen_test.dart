@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:todo_list/features/task_list/data/models/task_model.dart';
+import 'package:todo_list/features/task_list/data/models/sub_task_model.dart';
 import 'package:todo_list/features/task_list/presentation/providers/task_list_notifier.dart';
 import 'package:todo_list/features/task_list/presentation/screens/task_list_screen.dart';
 
@@ -17,7 +18,7 @@ class MockTaskListNotifier extends StreamNotifier<List<TaskModel>> implements Ta
   }
 
   @override
-  Future<void> addTask(String title, {String? description, DateTime? dueDate, CategoryModel? category}) async {
+  Future<void> addTask(String title, {String? description, DateTime? dueDate, CategoryModel? category, TaskPriority priority = TaskPriority.medium, List<SubTaskModel> subTasks = const []}) async {
     final task = TaskModel()
       ..id = DateTime.now().millisecondsSinceEpoch
       ..title = title
@@ -33,7 +34,7 @@ class MockTaskListNotifier extends StreamNotifier<List<TaskModel>> implements Ta
   }
 
   @override
-  Future<void> updateTask(int taskId, String title, {String? description, DateTime? dueDate, CategoryModel? category}) async {
+  Future<void> updateTask(int taskId, String title, {String? description, DateTime? dueDate, CategoryModel? category, TaskPriority priority = TaskPriority.medium, List<SubTaskModel> subTasks = const []}) async {
     _tasks = _tasks.map((t) {
       if (t.id == taskId) {
         t.title = title;
@@ -51,6 +52,15 @@ class MockTaskListNotifier extends StreamNotifier<List<TaskModel>> implements Ta
   }
 
   @override
+  Future<void> toggleSubTaskCompletion(int taskId, int subTaskIndex) async {
+    final task = state.value!.firstWhere((t) => t.id == taskId);
+    if (subTaskIndex >= 0 && subTaskIndex < task.subTasks.length) {
+      task.subTasks[subTaskIndex].isCompleted = !task.subTasks[subTaskIndex].isCompleted;
+      state = AsyncValue.data(List.from(state.value!));
+    }
+  }
+
+  @override
   Future<void> toggleTaskCompletion(int taskId) async {
     final task = state.value!.firstWhere((t) => t.id == taskId);
     task.isCompleted = !task.isCompleted;
@@ -60,6 +70,12 @@ class MockTaskListNotifier extends StreamNotifier<List<TaskModel>> implements Ta
   @override
   Future<void> deleteTask(int taskId) async {
     _tasks = _tasks.where((t) => t.id != taskId).toList();
+    state = AsyncData(_tasks);
+  }
+
+  @override
+  Future<void> clearCompletedTasks() async {
+    _tasks = _tasks.where((t) => !t.isCompleted).toList();
     state = AsyncData(_tasks);
   }
 
@@ -203,6 +219,10 @@ void main() {
     expect(find.byType(ListTile), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.delete));
+    await tester.pumpAndSettle();
+
+    // Xác nhận xóa trong Dialog
+    await tester.tap(find.text('Xóa'));
     await tester.pumpAndSettle();
 
     expect(find.byType(ListTile), findsNothing);
